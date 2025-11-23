@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">DamAndroid</string>
+    
+    <!-- Facebook App ID - Replace with your Facebook App ID from Facebook Developers Console -->
+    <string name="facebook_app_id">1890262184922204</string>
+    <!-- Facebook Client Token - Replace with your Facebook Client Token from Facebook Developers Console -->
+    <string name="facebook_client_token">e9775fbaefb3dd9d97907864d6c63045</string>
+    
+</resources>
