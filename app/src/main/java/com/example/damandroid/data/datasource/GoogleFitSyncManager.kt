@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import android.util.Log
 
 /**
- * Gestionnaire de synchronisation Fitness (Health Connect ou Google Fit)
+ * Gestionnaire de synchronisation Fitness (Strava ou autres applications)
  * Vérifie si une source de données fitness est connectée et synchronisée
  */
 class FitnessSyncManager(private val context: Context) {
@@ -72,10 +72,15 @@ class FitnessSyncManager(private val context: Context) {
 
     /**
      * Vérifie si l'accès à AI Coach est autorisé
-     * L'utilisateur doit avoir une source de données fitness connectée et synchronisée
+     * Permet l'accès même sans application fitness (l'utilisateur peut utiliser AI Coach avec des données par défaut)
      */
     suspend fun canAccessAICoach(): Boolean {
-        return isFitnessSourceConnected() && isSynced()
+        // Permettre l'accès même si pas d'application fitness connectée
+        // L'utilisateur peut toujours utiliser AI Coach
+        val isConnected = isFitnessSourceConnected()
+        val isSynced = isSynced()
+        Log.d(TAG, "AI Coach access check: isConnected=$isConnected, isSynced=$isSynced - allowing access anyway")
+        return true // Toujours permettre l'accès
     }
 
     /**
@@ -88,18 +93,18 @@ class FitnessSyncManager(private val context: Context) {
         
         return when {
             !isAvailable -> {
-                "Health Connect n'est pas disponible sur votre appareil. " +
-                "Veuillez installer Health Connect depuis le Play Store (nécessite Android 8.0 ou supérieur)."
+                "Aucune application fitness n'est disponible sur votre appareil. " +
+                "Veuillez installer Strava depuis le Play Store."
             }
             !isConnected -> {
-                "Veuillez connecter Health Connect pour accéder à AI Coach. " +
-                "Les données de workout, calories et minutes seront synchronisées depuis Health Connect."
+                "Veuillez connecter Strava pour accéder à AI Coach. " +
+                "Les données de workout, calories et minutes seront synchronisées depuis Strava."
             }
             !isSynced() -> {
-                "Veuillez synchroniser vos données Health Connect pour accéder à AI Coach."
+                "Veuillez synchroniser vos données Strava pour accéder à AI Coach."
             }
             else -> {
-                "Erreur inconnue lors de la vérification de Health Connect."
+                "Erreur inconnue lors de la vérification de l'application fitness."
             }
         }
     }

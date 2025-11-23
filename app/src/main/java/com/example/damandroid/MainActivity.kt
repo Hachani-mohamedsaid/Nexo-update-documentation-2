@@ -95,6 +95,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         googleSignInHelper = GoogleSignInHelper(this)
         facebookSignInHelper = FacebookSignInHelper(this)
+        
+        // Gérer le callback OAuth Strava si l'app est lancée depuis un deep link
+        handleStravaOAuthCallback(intent)
 
         setContent {
             val themePreferences = remember { ThemePreferences(applicationContext) }
@@ -128,6 +131,58 @@ class MainActivity : ComponentActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         facebookSignInHelper.getCallbackManager().onActivityResult(requestCode, resultCode, data)
+    }
+    
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // Gérer le callback OAuth Strava si l'app est relancée depuis un deep link
+        intent?.let { handleStravaOAuthCallback(it) }
+    }
+    
+    /**
+     * Gère le callback OAuth Strava depuis le deep link
+     */
+    private fun handleStravaOAuthCallback(intent: Intent) {
+        val data = intent.data
+        if (data != null && data.scheme == "nexofitness" && data.host == "strava") {
+            android.util.Log.d("MainActivity", "✅ Strava OAuth callback received: $data")
+            android.util.Log.d("MainActivity", "   Scheme: ${data.scheme}, Host: ${data.host}, Path: ${data.path}")
+            
+            val oAuthHelper = com.example.damandroid.auth.StravaOAuthHelper(this)
+            val code = oAuthHelper.handleCallback(data)
+            
+            if (code != null) {
+                android.util.Log.d("MainActivity", "✅ Authorization code extracted: $code")
+                // Échanger le code contre un token d'accès
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    try {
+                        android.util.Log.d("MainActivity", "🔄 Exchanging authorization code for access token...")
+                        val result = oAuthHelper.exchangeCodeForToken(code)
+                        when (result) {
+                            is com.example.damandroid.auth.StravaTokenResult.Success -> {
+                                android.util.Log.d("MainActivity", "✅✅✅ Strava OAuth success! Token received (length: ${result.accessToken.length})")
+                                // La synchronisation est maintenant réussie
+                                val syncManager = com.example.damandroid.data.datasource.FitnessSyncManager(this@MainActivity)
+                                syncManager.markAsSynced()
+                                android.util.Log.d("MainActivity", "✅ Strava marked as synced. Last sync time: ${syncManager.getLastSyncTime()}")
+                            }
+                            is com.example.damandroid.auth.StravaTokenResult.Error -> {
+                                android.util.Log.e("MainActivity", "❌ Strava OAuth error: ${result.message}")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "❌ Error exchanging Strava OAuth code", e)
+                    }
+                }
+            } else {
+                android.util.Log.w("MainActivity", "⚠️ No authorization code found in callback URI")
+            }
+        } else {
+            if (data != null) {
+                android.util.Log.d("MainActivity", "Ignoring non-Strava deep link: $data")
+            }
+        }
     }
 
     private fun handleGoogleSignInResult(task: Task<GoogleSignInAccount>) {
@@ -619,8 +674,8 @@ fun MainHomeScreen(
                 activeTab = activeTab,
                 onTabChange = { activeTab = it },
                 onAICoachClick = {
-                    // Ouvrir AI Coach - la vérification de synchronisation Health Connect se fera dans le ViewModel
-                    // Si Health Connect n'est pas synchronisé, l'écran de synchronisation s'affichera automatiquement
+                    // Ouvrir AI Coach - la vérification de synchronisation Strava se fera dans le ViewModel
+                    // Si Strava n'est pas synchronisé, l'écran de synchronisation s'affichera automatiquement
                     overlay = OverlayScreen.AICoach
                 },
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -672,3 +727,4 @@ fun GreetingPreview() {
         Greeting("Android")
     }
 }
+

@@ -14,7 +14,7 @@ class AICoachRemoteDataSourceImpl(
     private val fitnessDataSourceManager: FitnessDataSourceManager? = context?.let { FitnessDataSourceManager(it) }
     
     override suspend fun fetchOverview(): AICoachOverviewDto {
-        // Récupérer les vraies données depuis la meilleure source disponible (Health Connect ou Google Fit)
+        // Récupérer les vraies données depuis la meilleure source disponible (Strava ou autres)
         val weeklyStats = if (fitnessDataSourceManager != null) {
             try {
                 val fitStats = fitnessDataSourceManager.getWeeklyStats()

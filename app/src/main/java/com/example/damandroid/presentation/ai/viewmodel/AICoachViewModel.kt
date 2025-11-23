@@ -28,7 +28,7 @@ class AICoachViewModel(
     }
     
     /**
-     * Vérifie les permissions Health Connect quand l'utilisateur revient à l'écran
+     * Vérifie les permissions Strava quand l'utilisateur revient à l'écran
      * Appelé automatiquement lors du refresh ou manuellement après avoir accordé les permissions
      */
     fun checkPermissionsAndRefresh() {
@@ -37,25 +37,57 @@ class AICoachViewModel(
             
             if (syncManager != null && context != null) {
                 val fitnessDataSourceManager = com.example.damandroid.data.datasource.FitnessDataSourceManager(context!!)
-                val isConnected = fitnessDataSourceManager.isAnySourceConnected()
                 
-                if (isConnected) {
-                    // Les permissions sont accordées, marquer comme synchronisé
-                    syncManager.markAsSynced()
-                    Log.d("AICoachViewModel", "Health Connect permissions granted! Marking as synced and refreshing...")
-                    refresh()
-                } else {
-                    // Les permissions ne sont pas encore accordées
-                    val errorMessage = syncManager.getAccessErrorMessage()
+                // Vérifier si Strava est disponible et connecté
+                val isAvailable = fitnessDataSourceManager.isAnySourceAvailable()
+                val isConnected = fitnessDataSourceManager.isAnySourceConnected()
+                Log.d("AICoachViewModel", "Strava status check: isAvailable=$isAvailable, isConnected=$isConnected")
+                
+                if (!isAvailable) {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = "Les permissions n'ont pas encore été accordées.\n\n" +
+                            error = "Strava n'est pas installé sur votre appareil.\n\n" +
+                                    "Veuillez installer Strava depuis le Play Store:\n" +
+                                    "https://play.google.com/store/apps/details?id=com.strava\n\n" +
+                                    "Note: Vous pouvez toujours utiliser AI Coach sans Strava.",
+                            needsGoogleFitSync = true
+                        )
+                    }
+                    return@launch
+                }
+                
+                if (isConnected) {
+                    // Strava est connecté via OAuth, marquer comme synchronisé
+                    syncManager.markAsSynced()
+                    Log.d("AICoachViewModel", "✅ Strava connecté via OAuth! Marking as synced and refreshing...")
+                    refresh()
+                } else if (isAvailable) {
+                    // Strava est installé mais pas encore connecté via OAuth
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Strava est installé mais n'est pas encore connecté via OAuth.\n\n" +
+                                    "Pour récupérer vos données fitness (workouts, calories, minutes), " +
+                                    "vous devez connecter votre compte Strava.\n\n" +
                                     "Instructions:\n" +
-                                    "1. Ouvrez Health Connect\n" +
-                                    "2. Allez dans 'Applications et services'\n" +
-                                    "3. Trouvez 'DamAndroid' et activez les permissions\n" +
-                                    "4. Revenez ici et cliquez sur 'Vérifier'",
+                                    "1. Cliquez sur 'Connecter Strava' pour lancer le processus d'authentification.\n" +
+                                    "2. Autorisez l'accès à votre compte Strava sur la page web qui s'ouvrira.\n" +
+                                    "3. Revenez ici et cliquez sur 'J'ai accordé les permissions - Vérifier'.\n\n" +
+                                    "Note: Vous pouvez toujours utiliser AI Coach sans Strava.",
+                            needsGoogleFitSync = true
+                        )
+                    }
+                } else {
+                    // Strava n'est pas installé
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Strava n'est pas installé sur votre appareil.\n\n" +
+                                    "Pour utiliser AI Coach avec vos données fitness, " +
+                                    "veuillez installer Strava depuis le Play Store:\n" +
+                                    "https://play.google.com/store/apps/details?id=com.strava\n\n" +
+                                    "Note: Vous pouvez toujours utiliser AI Coach sans Strava.",
                             needsGoogleFitSync = true
                         )
                     }
@@ -76,22 +108,55 @@ class AICoachViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             
-            // Vérifier la synchronisation Health Connect - BLOQUER L'ACCÈS si pas synchronisé
-            if (syncManager != null) {
-                val canAccess = syncManager.canAccessAICoach()
-                if (!canAccess) {
-                    val errorMessage = syncManager.getAccessErrorMessage()
+            // Vérifier l'état de connexion Strava
+            if (syncManager != null && context != null) {
+                val fitnessDataSourceManager = com.example.damandroid.data.datasource.FitnessDataSourceManager(context!!)
+                val isAvailable = fitnessDataSourceManager.isAnySourceAvailable()
+                val isConnected = fitnessDataSourceManager.isAnySourceConnected()
+                val appName = fitnessDataSourceManager.getCurrentAppName()
+                
+                Log.d("AICoachViewModel", "=== STRAVA CONNECTION STATUS ===")
+                Log.d("AICoachViewModel", "App: $appName")
+                Log.d("AICoachViewModel", "Is Available (installed): $isAvailable")
+                Log.d("AICoachViewModel", "Is Connected: $isConnected")
+                Log.d("AICoachViewModel", "Sync Status (before): ${syncManager.isSynced()}")
+                Log.d("AICoachViewModel", "Last Sync Time: ${syncManager.getLastSyncTime()}")
+                
+                // Si Strava est installé et connecté, marquer automatiquement comme synchronisé
+                if (isConnected && !syncManager.isSynced()) {
+                    Log.d("AICoachViewModel", "✅ Strava détecté! Marquant comme synchronisé...")
+                    syncManager.markAsSynced()
+                    Log.d("AICoachViewModel", "Sync Status (after): ${syncManager.isSynced()}")
+                }
+                
+                // Si Strava est disponible mais pas connecté, afficher l'écran de synchronisation
+                if (isAvailable && !isConnected) {
+                    Log.d("AICoachViewModel", "⚠️ Strava est installé mais pas connecté via OAuth - affichage de l'écran de synchronisation")
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            error = errorMessage,
-                            needsGoogleFitSync = true  // Affiche l'écran de synchronisation
+                            error = "Strava est installé mais n'est pas encore connecté via OAuth.\n\n" +
+                                    "Pour récupérer vos données fitness (workouts, calories, minutes), " +
+                                    "vous devez connecter votre compte Strava.\n\n" +
+                                    "Instructions:\n" +
+                                    "1. Cliquez sur 'Connecter Strava' pour lancer le processus d'authentification.\n" +
+                                    "2. Autorisez l'accès à votre compte Strava sur la page web qui s'ouvrira.\n" +
+                                    "3. Revenez ici et cliquez sur 'J'ai accordé les permissions - Vérifier'.\n\n" +
+                                    "Note: Vous pouvez toujours utiliser AI Coach sans Strava.",
+                            needsGoogleFitSync = true
                         )
                     }
-                    // NE PAS charger les données - l'utilisateur doit d'abord synchroniser
                     return@launch
                 }
+                
+                Log.d("AICoachViewModel", "================================")
+            } else {
+                Log.d("AICoachViewModel", "⚠️ Cannot check Strava status: syncManager or context is null")
             }
+            
+            // Permettre l'accès à AI Coach même sans application fitness
+            // L'utilisateur peut utiliser AI Coach avec des données par défaut
+            Log.d("AICoachViewModel", "Loading AI Coach data (fitness app connection is optional)")
             
             runCatching { getAICoachOverview() }
                 .onSuccess { overview ->
@@ -121,141 +186,77 @@ class AICoachViewModel(
     }
     
     /**
-     * Demande les permissions Health Connect
+     * Demande les permissions Strava via OAuth
      * 
-     * Quand l'utilisateur clique sur "Connecter l'application Fitness" :
-     * 1. Vérifie si Health Connect est disponible
-     * 2. Si Health Connect n'est pas installé, affiche un message pour l'installer
-     * 3. Si Health Connect est installé, ouvre l'application Health Connect
-     * 4. L'utilisateur doit accorder les permissions dans Health Connect
-     * 5. Quand l'utilisateur revient à l'app, on vérifie si les permissions sont accordées
-     * 6. Si oui, on marque comme synchronisé et on rafraîchit les données
+     * Quand l'utilisateur clique sur "Connecter Strava" :
+     * 1. Vérifie si Strava est disponible
+     * 2. Si Strava n'est pas installé, affiche un message pour l'installer
+     * 3. Si Strava est installé, lance le flux OAuth qui ouvre le navigateur
+     * 4. L'utilisateur autorise l'accès sur la page web Strava
+     * 5. Strava redirige vers l'app via le deep link nexofitness://strava/callback
+     * 6. MainActivity gère le callback et échange le code contre un token
+     * 7. L'app est automatiquement marquée comme synchronisée
      */
     fun requestFitnessSync(activity: android.app.Activity) {
+        Log.d("AICoachViewModel", "🔄 requestFitnessSync called")
         viewModelScope.launch {
+            Log.d("AICoachViewModel", "🔄 requestFitnessSync: Starting coroutine")
             if (syncManager != null && context != null) {
+                Log.d("AICoachViewModel", "🔄 requestFitnessSync: syncManager and context are available")
                 val fitnessDataSourceManager = com.example.damandroid.data.datasource.FitnessDataSourceManager(context!!)
                 
-                // Vérifier si Health Connect est disponible
+                // Vérifier si Strava est disponible
                 val isAvailable = fitnessDataSourceManager.isAnySourceAvailable()
+                Log.d("AICoachViewModel", "🔄 requestFitnessSync: isAvailable=$isAvailable")
                 if (!isAvailable) {
+                    Log.w("AICoachViewModel", "⚠️ Strava is not available")
                     _uiState.update {
                         it.copy(
-                            error = "Health Connect n'est pas disponible sur votre appareil. " +
-                                    "Veuillez installer Health Connect depuis le Play Store (nécessite Android 8.0 ou supérieur).",
+                            error = "Strava n'est pas installé sur votre appareil.\n\n" +
+                                    "Veuillez installer Strava depuis le Play Store:\n" +
+                                    "https://play.google.com/store/apps/details?id=com.strava\n\n" +
+                                    "Note: Vous pouvez toujours utiliser AI Coach sans Strava.",
                             needsGoogleFitSync = true
                         )
                     }
                     return@launch
                 }
                 
-                // Pour Health Connect, on doit ouvrir l'application Health Connect
-                val sourceName = fitnessDataSourceManager.getCurrentAppName()
-                if (sourceName == "Health Connect") {
-                    // Ouvrir Health Connect pour que l'utilisateur accorde les permissions
-                    try {
-                        val packageName = "com.google.android.apps.healthdata"
-                        
-                        // Vérifier si Health Connect est installé
-                        val packageManager = activity.packageManager
-                        val isInstalled = try {
-                            packageManager.getPackageInfo(packageName, 0)
-                            true
-                        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-                            false
-                        }
-                        
-                        if (!isInstalled) {
-                            _uiState.update {
-                                it.copy(
-                                    error = "Health Connect n'est pas installé sur votre appareil.\n\n" +
-                                            "Veuillez installer Health Connect depuis le Play Store:\n" +
-                                            "https://play.google.com/store/apps/details?id=$packageName",
-                                    needsGoogleFitSync = true
-                                )
-                            }
-                            return@launch
-                        }
-                        
-                        // Essayer d'abord avec getLaunchIntentForPackage
-                        var intent = packageManager.getLaunchIntentForPackage(packageName)
-                        
-                        // Si ça ne fonctionne pas, essayer avec un intent explicite
-                        if (intent == null) {
-                            try {
-                                intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
-                                    setPackage(packageName)
-                                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                            } catch (e: Exception) {
-                                Log.e("AICoachViewModel", "Error creating explicit intent for Health Connect", e)
-                            }
-                        }
-                        
-                        if (intent != null) {
-                            // Ajouter des flags pour s'assurer que l'intent fonctionne
-                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            
-                            Log.d("AICoachViewModel", "Opening Health Connect with intent: $intent")
-                            activity.startActivity(intent)
-                            
-                            // Afficher un message informatif avec instructions
-                            _uiState.update {
-                                it.copy(
-                                    error = "Instructions:\n\n" +
-                                            "1. Health Connect devrait s'ouvrir maintenant\n" +
-                                            "2. Dans Health Connect, allez dans 'Applications et services'\n" +
-                                            "3. Trouvez 'DamAndroid' (ou 'com.example.damandroid')\n" +
-                                            "4. Activez les permissions pour:\n" +
-                                            "   - Sessions d'exercice\n" +
-                                            "   - Calories brûlées\n" +
-                                            "5. Revenez à cette application\n" +
-                                            "6. Cliquez sur 'J'ai accordé les permissions - Vérifier'",
-                                    needsGoogleFitSync = true
-                                )
-                            }
-                            
-                            // Note: On ne marque pas comme synchronisé immédiatement
-                            // L'utilisateur doit revenir à l'app et cliquer sur "Vérifier" ou on vérifiera au prochain refresh
-                        } else {
-                            // Health Connect est installé mais on ne peut pas l'ouvrir
-                            _uiState.update {
-                                it.copy(
-                                    error = "Health Connect est installé mais ne peut pas être ouvert automatiquement.\n\n" +
-                                            "Veuillez ouvrir Health Connect manuellement:\n" +
-                                            "1. Ouvrez l'application Health Connect\n" +
-                                            "2. Allez dans 'Applications et services'\n" +
-                                            "3. Trouvez 'DamAndroid' et activez les permissions\n" +
-                                            "4. Revenez ici et cliquez sur 'Vérifier'",
-                                    needsGoogleFitSync = true
-                                )
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e("AICoachViewModel", "Error opening Health Connect", e)
-                        _uiState.update {
-                            it.copy(
-                                error = "Erreur lors de l'ouverture de Health Connect:\n${e.message}\n\n" +
-                                        "Veuillez ouvrir Health Connect manuellement depuis le menu des applications.",
-                                needsGoogleFitSync = true
-                            )
-                        }
+                // Lancer le flux OAuth Strava
+                // Cela ouvrira le navigateur pour l'authentification
+                Log.d("AICoachViewModel", "🔄 requestFitnessSync: Calling requestPermissions...")
+                val success = fitnessDataSourceManager.requestPermissions(activity)
+                Log.d("AICoachViewModel", "🔄 requestFitnessSync: requestPermissions returned success=$success")
+                if (success) {
+                    // Ne pas marquer comme synchronisé immédiatement - attendre le callback OAuth
+                    // Le callback OAuth dans MainActivity marquera comme synchronisé automatiquement
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            error = "Authentification Strava lancée.\n\n" +
+                                    "1. Une page web devrait s'ouvrir dans votre navigateur\n" +
+                                    "2. Connectez-vous à votre compte Strava si nécessaire\n" +
+                                    "3. Autorisez l'accès aux données d'activité\n" +
+                                    "4. Vous serez automatiquement redirigé vers l'application\n\n" +
+                                    "Si rien ne se passe, vérifiez que les credentials Strava sont configurés.",
+                            needsGoogleFitSync = true
+                        )
                     }
+                    // Vérifier périodiquement si la connexion est établie
+                    kotlinx.coroutines.delay(2000)
+                    checkPermissionsAndRefresh()
                 } else {
-                    // Pour d'autres sources, utiliser la méthode normale
-                    val success = fitnessDataSourceManager.requestPermissions(activity)
-                    if (success) {
-                        syncManager.markAsSynced()
-                        kotlinx.coroutines.delay(1000)
-                        refresh()
-                    } else {
-                        _uiState.update {
-                            it.copy(
-                                error = "Impossible d'obtenir les permissions. Veuillez réessayer.",
-                                needsGoogleFitSync = true
-                            )
-                        }
+                    _uiState.update {
+                        it.copy(
+                            error = "Impossible de lancer l'authentification Strava.\n\n" +
+                                    "Assurez-vous que:\n" +
+                                    "1. Strava est installé sur votre appareil\n" +
+                                    "2. Les credentials Strava sont configurés dans StravaOAuthHelper.kt\n" +
+                                    "3. L'URL de callback est: nexofitness://strava/callback\n" +
+                                    "4. Le domaine 'nexofitness' est configuré dans les paramètres Strava\n\n" +
+                                    "Voir CORRECTION_FORMULAIRE_STRAVA.md pour plus de détails.",
+                            needsGoogleFitSync = true
+                        )
                     }
                 }
             }

@@ -68,8 +68,8 @@ dependencies {
     // Google Sign-In
     implementation("com.google.android.gms:play-services-auth:21.0.0")
     
-    // Health Connect (Alternative gratuite à Google Fit, compatible partout)
-    implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
+    // Strava API - Application fitness populaire et gratuite
+    // Pas de dépendance externe nécessaire, utilisation de l'API REST Strava
     
     // Facebook Login
     implementation("com.facebook.android:facebook-login:16.2.0")

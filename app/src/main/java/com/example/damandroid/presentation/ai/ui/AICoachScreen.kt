@@ -89,7 +89,9 @@ fun AICoachRoute(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val activity = context as? androidx.appcompat.app.AppCompatActivity
+    val activity = context as? androidx.appcompat.app.AppCompatActivity ?: context as? android.app.Activity
+    
+    android.util.Log.d("AICoachScreen", "🔍 Activity check: context=$context, activity=$activity")
     
     AICoachScreen(
         state = uiState,
@@ -100,8 +102,11 @@ fun AICoachRoute(
         onFindPartner = onFindPartner,
         onSuggestionJoin = onSuggestionJoin,
         onRequestGoogleFitSync = {
-            activity?.let {
-                viewModel.requestFitnessSync(it)
+            android.util.Log.d("AICoachScreen", "🔄 onRequestGoogleFitSync clicked, activity=$activity")
+            if (activity != null) {
+                viewModel.requestFitnessSync(activity)
+            } else {
+                android.util.Log.e("AICoachScreen", "❌ Activity is null, cannot launch OAuth flow")
             }
         },
         onCheckPermissions = {
@@ -128,7 +133,7 @@ fun AICoachScreen(
     when {
         state.isLoading -> LoadingState(modifier)
         state.needsGoogleFitSync -> GoogleFitSyncRequiredState(
-            message = state.error ?: "Veuillez synchroniser Health Connect",
+            message = state.error ?: "Veuillez synchroniser Strava",
             onRequestSync = onRequestGoogleFitSync ?: {},
             onBack = onBack,
             onCheckPermissions = onCheckPermissions,
@@ -215,10 +220,10 @@ private fun GoogleFitSyncRequiredState(
                 onClick = onRequestSync,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Ouvrir Health Connect")
+                Text("Connecter Strava")
             }
             Spacer(modifier = Modifier.height(12.dp))
-            // Bouton pour vérifier les permissions après avoir accordé dans Health Connect
+            // Bouton pour vérifier les permissions après avoir accordé dans Strava
             if (onCheckPermissions != null) {
                 OutlinedButton(
                     onClick = onCheckPermissions,

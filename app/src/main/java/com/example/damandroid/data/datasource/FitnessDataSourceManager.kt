@@ -6,9 +6,8 @@ import android.util.Log
 /**
  * Gestionnaire qui choisit automatiquement la meilleure source de données fitness disponible
  * Priorité :
- * 1. Health Connect (Android 14+, gratuit, compatible partout)
- * 2. Google Fit (si disponible)
- * 3. Autres sources (Strava, Fitbit, etc.)
+ * 1. Strava (Application fitness populaire, gratuite, compatible partout)
+ * 2. Autres sources (Fitbit, etc.)
  */
 class FitnessDataSourceManager(private val context: Context) {
 
@@ -17,7 +16,7 @@ class FitnessDataSourceManager(private val context: Context) {
     }
 
     private val dataSources: List<FitnessDataSource> = listOf(
-        HealthConnectDataSource(context)
+        StravaDataSource(context)
     )
 
     /**
@@ -59,7 +58,18 @@ class FitnessDataSourceManager(private val context: Context) {
      * Vérifie si au moins une source est disponible
      */
     suspend fun isAnySourceAvailable(): Boolean {
-        return getBestAvailableDataSource() != null
+        for (dataSource in dataSources) {
+            try {
+                if (dataSource.isAvailable()) {
+                    Log.d(TAG, "Found available fitness data source: ${dataSource.getAppName()}")
+                    return true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking ${dataSource.getAppName()} availability", e)
+            }
+        }
+        Log.d(TAG, "No fitness data source available")
+        return false
     }
 
     /**
@@ -82,15 +92,21 @@ class FitnessDataSourceManager(private val context: Context) {
      * Demande les permissions pour la meilleure source disponible
      */
     suspend fun requestPermissions(activity: android.app.Activity): Boolean {
+        Log.d(TAG, "🔄 requestPermissions called")
         val dataSource = getBestAvailableDataSource()
+        Log.d(TAG, "🔄 requestPermissions: dataSource=${dataSource?.getAppName()}")
         return if (dataSource != null) {
             try {
-                dataSource.requestPermissions(activity)
+                val result = dataSource.requestPermissions(activity)
+                Log.d(TAG, "🔄 requestPermissions: result=$result")
+                result
             } catch (e: Exception) {
-                Log.e(TAG, "Error requesting permissions for ${dataSource.getAppName()}", e)
+                Log.e(TAG, "❌ Error requesting permissions for ${dataSource.getAppName()}", e)
+                e.printStackTrace()
                 false
             }
         } else {
+            Log.w(TAG, "⚠️ No data source available")
             false
         }
     }
